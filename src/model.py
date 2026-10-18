@@ -295,10 +295,80 @@ report_test_results(
     lr_test_predictions,
 )
 
-# Export frozen held-out predictions for SQL and Power BI
+# Export frozen final test metrics for SQL and Power BI
 REPORTS_DIR = PROJECT_ROOT / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+metrics_path = REPORTS_DIR / "final_test_metrics.csv"
+
+# Prevent accidental overwriting of the frozen report
+if metrics_path.exists():
+    raise FileExistsError(
+        f"{metrics_path} already exists. "
+        "The frozen metrics file will not be overwritten."
+    )
+
+
+def calculate_metrics_row(
+    model_name,
+    y_true,
+    scores,
+    predictions,
+):
+    y_true = np.asarray(y_true)
+    predictions = np.asarray(predictions)
+
+    tn, fp, fn, tp = confusion_matrix(
+        y_true,
+        predictions,
+        labels=[0, 1],
+    ).ravel()
+
+    return {
+        "Model": model_name,
+        "Test_Rows": len(y_true),
+        "Fraud_Labelled": int(y_true.sum()),
+        "Average_Precision": average_precision_score(
+            y_true, scores
+        ),
+        "Transactions_Flagged": int(predictions.sum()),
+        "True_Positives": int(tp),
+        "False_Positives": int(fp),
+        "False_Negatives": int(fn),
+        "Precision": precision_score(
+            y_true, predictions, zero_division=0
+        ),
+        "Recall": recall_score(
+            y_true, predictions, zero_division=0
+        ),
+        "F1_Score": f1_score(
+            y_true, predictions, zero_division=0
+        ),
+        "Target_Review_Rate": 0.002,
+    }
+
+
+final_metrics = pd.DataFrame([
+    calculate_metrics_row(
+        "Isolation Forest",
+        y_test,
+        if_test_scores,
+        if_test_predictions,
+    ),
+    calculate_metrics_row(
+        "Logistic Regression",
+        y_test,
+        lr_test_scores,
+        lr_test_predictions,
+    ),
+])
+
+final_metrics.to_csv(metrics_path, index=False, float_format="%.5f")
+
+print(f"\nFrozen test metrics exported to: {metrics_path}")
+print(final_metrics.to_string(index=False))
+
+# Export frozen held-out predictions 
 output_path = REPORTS_DIR / "test_predictions.csv"
 
 if output_path.exists():
