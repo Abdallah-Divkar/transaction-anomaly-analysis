@@ -1,45 +1,41 @@
-import pandas as pd
-import numpy as np
 
-df = pd.read_csv("../data/raw/creditcard.csv")
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+# Data loading
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = PROJECT_ROOT / "data" / "raw" / "creditcard.csv"
+
+df = pd.read_csv(DATA_PATH)
 
 print("Dataset shape:", df.shape)
-
+print("\nFirst five rows:")
 print(df.head())
 
 print("\nColumn information:")
 df.info()
 
-print("\nMissing values:")
-print(df.isnull().sum().sum())
+print("\nTotal missing values:", df.isnull().sum().sum())
+print("Duplicate rows:", df.duplicated().sum())
 
-print("\nDuplicate rows:", df.duplicated().sum())
+
+# Class distribution and duplicate analysis
+class_names = {0: "Legitimate", 1: "Fraud-labelled"}
 
 print("\nClass distribution:")
-print(df["Class"].value_counts())
+print(df["Class"].value_counts().sort_index())
 
-print("\nFraud percentage:")
-print(df["Class"].mean() * 100)
+print("\nFraud-label percentage:")
+print(f"{df['Class'].mean() * 100:.5f}%")
 
-# Investigate duplicate rows
-duplicate_rows = df[df.duplicated(keep=False)]
-
-print("\nRows involved in duplicates:", len(duplicate_rows))
-
-print("\nClass distribution among duplicate rows:")
-print(duplicate_rows["Class"].value_counts())
-
-print("\nDuplicate rows by class:")
-print(
-    duplicate_rows.groupby("Class")
-    .size()
-)
-
-# Compare class counts and percentages
 class_summary = (
     df["Class"]
     .value_counts()
-    .rename(index={0: "Legitimate", 1: "Fraud"})
+    .sort_index()
+    .rename(index=class_names)
     .to_frame("Transaction_Count")
 )
 
@@ -50,24 +46,32 @@ class_summary["Percentage"] = (
 print("\nClass summary:")
 print(class_summary)
 
-import matplotlib.pyplot as plt
+duplicate_rows = df[df.duplicated(keep=False)]
 
+print("\nRows belonging to duplicate groups:", len(duplicate_rows))
+print("\nClass distribution among these rows:")
+print(duplicate_rows["Class"].value_counts().sort_index())
+
+
+# Class imbalance chart
 class_counts = df["Class"].value_counts().sort_index()
+
+class_counts.index = [
+    class_names[value] for value in class_counts.index
+]
 
 class_counts.plot(
     kind="bar",
-    xlabel="Class (0 = legitimate, 1 = fraud)",
+    xlabel="Transaction class",
     ylabel="Number of transactions",
     title="Legitimate vs Fraud-Labelled Transactions",
-    rot=0
+    rot=0,
 )
 
 plt.tight_layout()
 plt.show()
 
-import matplotlib.pyplot as plt
-
-# Compare transaction amounts by class
+# Transaction amount analysis
 amount_summary = df.groupby("Class")["Amount"].agg(
     ["count", "mean", "median", "min", "max"]
 )
@@ -75,63 +79,67 @@ amount_summary = df.groupby("Class")["Amount"].agg(
 print("\nTransaction amount summary:")
 print(amount_summary)
 
-# Compare amount distributions without extreme values dominating the chart
-plt.figure(figsize=(10, 5))
+df["LogAmount"] = np.log1p(df["Amount"])
 
-for class_value, label in [(0, "Legitimate"), (1, "Fraud")]:
-    amounts = df.loc[df["Class"] == class_value, "Amount"]
+plt.figure(figsize=(9, 5))
+
+for class_value, label in class_names.items():
+    amounts = df.loc[df["Class"] == class_value, "LogAmount"]
+
     plt.hist(
         amounts,
         bins=50,
+        density=True,
         alpha=0.6,
-        label=label
+        label=label,
     )
 
-plt.xlabel("Transaction amount")
-plt.ylabel("Number of transactions")
+plt.xlabel("log(1 + transaction amount)")
+plt.ylabel("Density")
 plt.title("Transaction Amount Distribution by Class")
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Log transformation handles the skewed transaction amounts.
-# log1p(x) = log(1 + x), so zero amounts remain valid.
-df["LogAmount"] = np.log1p(df["Amount"])
-
-legitimate = df.loc[df["Class"] == 0, "LogAmount"]
-fraud = df.loc[df["Class"] == 1, "LogAmount"]
-
 plt.figure(figsize=(8, 5))
 
+boxplot_data = [
+    df.loc[df["Class"] == class_value, "LogAmount"]
+    for class_value in [0, 1]
+]
+
 plt.boxplot(
-    [legitimate, fraud],
+    boxplot_data,
     tick_labels=["Legitimate", "Fraud-labelled"],
-    showfliers=False
+    showfliers=False,
 )
 
 plt.ylabel("log(1 + transaction amount)")
-plt.title("Transaction Amount Distribution by Class")
+plt.title("Transaction Amount Comparison by Class")
 plt.tight_layout()
 plt.show()
 
-####
+
+# Zero-amount analysis
 zero_amount_summary = (
-    df.assign(IsZeroAmount=df["Amount"].eq(0))
-    .groupby("Class")["IsZeroAmount"]
-    .agg(["sum", "mean"])
+    df.groupby("Class")["Amount"]
+    .agg(
+        Zero_Amount_Count=lambda values: values.eq(0).sum(),
+        Transaction_Count="size",
+    )
 )
 
 zero_amount_summary["Percentage"] = (
-    zero_amount_summary["mean"] * 100
+    zero_amount_summary["Zero_Amount_Count"]
+    / zero_amount_summary["Transaction_Count"]
+    * 100
 )
 
 print("\nZero-amount transaction analysis:")
 print(zero_amount_summary)
 
-# Compare transaction time by class
+
+# Transaction time analysis
 time_summary = df.groupby("Class")["Time"].agg(
     ["count", "mean", "median", "min", "max"]
 )
@@ -139,36 +147,31 @@ time_summary = df.groupby("Class")["Time"].agg(
 print("\nTransaction time summary:")
 print(time_summary)
 
-# Visualize transaction time distributions
-plt.figure(figsize=(10, 5))
+plt.figure(figsize=(9, 5))
 
-plt.hist(
-    df.loc[df["Class"] == 0, "Time"],
-    bins=50,
-    density=True,
-    alpha=0.6,
-    label="Legitimate"
-)
+for class_value, label in class_names.items():
+    times = df.loc[df["Class"] == class_value, "Time"]
 
-plt.hist(
-    df.loc[df["Class"] == 1, "Time"],
-    bins=50,
-    density=True,
-    alpha=0.6,
-    label="Fraud-labelled"
-)
+    plt.hist(
+        times,
+        bins=50,
+        density=True,
+        alpha=0.6,
+        label=label,
+    )
 
 plt.xlabel("Elapsed time (seconds)")
-plt.ylabel("Proportion density")
+plt.ylabel("Density")
 plt.title("Transaction Time Distribution by Class")
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Compare feature averages by class
+# Anonymized feature comparison
 feature_columns = [
-    col for col in df.columns
-    if col.startswith("V")
+    column
+    for column in df.columns
+    if column.startswith("V")
 ]
 
 feature_means = df.groupby("Class")[feature_columns].mean().T
@@ -182,10 +185,10 @@ feature_means["Absolute_Difference"] = (
     feature_means["Mean_Difference"].abs()
 )
 
+top_features = feature_means.sort_values(
+    "Absolute_Difference",
+    ascending=False,
+).head(10)
+
 print("\nFeatures with the largest absolute mean differences:")
-print(
-    feature_means.sort_values(
-        "Absolute_Difference",
-        ascending=False
-    ).head(10)
-)
+print(top_features)
