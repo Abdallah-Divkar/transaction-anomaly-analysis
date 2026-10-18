@@ -437,3 +437,68 @@ for rate in [0.002, 0.005, 0.01]:
             f"f1={result['f1']:.4f}"
         )
 
+# -----------------------------
+# Final evaluation on held-out test data
+# -----------------------------
+
+# Choose the review threshold from validation data only.
+review_rate = 0.002  # 0.2%
+
+if_threshold = np.quantile(if_val_scores, 1 - review_rate)
+lr_threshold = np.quantile(lr_val_scores, 1 - review_rate)
+
+# Apply the fixed validation thresholds to test scores.
+if_test_pred = (if_test_scores >= if_threshold).astype(int)
+lr_test_pred = (lr_test_scores >= lr_threshold).astype(int)
+
+print("\nFINAL TEST RESULTS")
+print("==================")
+
+print("\nTest-set average precision")
+print(
+    "Isolation Forest:",
+    round(average_precision_score(y_test, if_test_scores), 5),
+)
+print(
+    "Logistic Regression:",
+    round(average_precision_score(y_test, lr_test_scores), 5),
+)
+
+
+def report_test_results(name, y_true, predictions):
+    tn, fp, fn, tp = confusion_matrix(
+        y_true, predictions, labels=[0, 1]
+    ).ravel()
+
+    print(f"\n{name}")
+    print("-" * len(name))
+    print("Transactions flagged:", int(predictions.sum()))
+    print("Fraud-labelled transactions caught:", int(tp))
+    print("Legitimate transactions flagged:", int(fp))
+    print("Fraud-labelled transactions missed:", int(fn))
+    print(
+        "Precision:",
+        round(precision_score(y_true, predictions, zero_division=0), 4),
+    )
+    print(
+        "Recall:",
+        round(recall_score(y_true, predictions, zero_division=0), 4),
+    )
+    print(
+        "F1-score:",
+        round(f1_score(y_true, predictions, zero_division=0), 4),
+    )
+
+
+report_test_results(
+    "Isolation Forest at 0.2% validation review rate",
+    y_test,
+    if_test_pred,
+)
+
+report_test_results(
+    "Logistic Regression at 0.2% validation review rate",
+    y_test,
+    lr_test_pred,
+)
+
