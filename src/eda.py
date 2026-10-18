@@ -171,21 +171,3 @@ feature_columns = [
     if col.startswith("V")
 ]
 
-feature_means = df.groupby("Class")[feature_columns].mean().T
-feature_means.columns = ["Legitimate", "Fraud"]
-
-feature_means["Mean_Difference"] = (
-    feature_means["Fraud"] - feature_means["Legitimate"]
-)
-
-feature_means["Absolute_Difference"] = (
-    feature_means["Mean_Difference"].abs()
-)
-
-print("\nFeatures with the largest absolute mean differences:")
-print(
-    feature_means.sort_values(
-        "Absolute_Difference",
-        ascending=False
-    ).head(10)
-)
