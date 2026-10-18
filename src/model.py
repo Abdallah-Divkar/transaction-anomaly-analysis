@@ -294,3 +294,37 @@ report_test_results(
     lr_test_scores,
     lr_test_predictions,
 )
+
+# Export frozen held-out predictions for SQL and Power BI
+REPORTS_DIR = PROJECT_ROOT / "reports"
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+output_path = REPORTS_DIR / "test_predictions.csv"
+
+if output_path.exists():
+    raise FileExistsError(
+        f"{output_path} already exists. "
+        "It will not be overwritten because test results are frozen."
+    )
+
+predictions_df = df.loc[
+    test_indices, ["Time", "Amount", "Class"]
+].copy()
+
+predictions_df.insert(
+    0,
+    "Transaction_ID",
+    test_indices.to_numpy(),
+)
+
+predictions_df["IsolationForest_Score"] = if_test_scores
+predictions_df["IsolationForest_Flag"] = if_test_predictions
+
+predictions_df["LogisticRegression_Score"] = lr_test_scores
+predictions_df["LogisticRegression_Flag"] = lr_test_predictions
+
+predictions_df.to_csv(output_path, index=False)
+
+print(f"\nTest predictions exported to: {output_path}")
+print("Exported rows:", len(predictions_df))
+print("Exported columns:", predictions_df.columns.tolist())
